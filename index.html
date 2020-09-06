@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>UD annotation tool</title>
+    <script type="text/javascript" src="js/vis.min.js"></script>
+    <link rel="stylesheet" href="css/vis.min.css"/>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans&family=Noto+Sans+KR&display=swap" rel="stylesheet"/>
+    <script src="js/mithril.js"></script>
+    <script src="js/main.js"></script>
+    <script src="js/components.js"></script>
+</head>
+<style>
+    body {
+        font-family: 'Noto Sans', sans-serif;
+        font-size: 12pt;
+        padding: 0 30px 30px 30px;
+        margin: 0;
+    }
+    input[type=text], textarea {
+        font-family: 'Noto Sans', sans-serif;
+        font-size: 12pt;
+    }
+    .parse-div {
+        border: 1px solid grey;
+        padding: 10px;
+        border-radius: 3px;
+        margin-bottom: 10px;
+    }
+    .endpoint-select {
+        width: 120px;
+        padding: 5px;
+        font-size: 11pt;
+        font-family: 'Noto Sans', sans-serif;
+        margin-bottom: 3px;
+    }
+    .token-button {
+        display: inline-block;
+        padding: 7px;
+        border: 1px dotted dimgrey;
+        border-radius: 2px;
+        margin-right: 10px;
+        margin-bottom: 10px;
+    }
+    .token-button:hover {
+        border-color: white;
+        color: white;
+        background-color: black !important;
+        cursor: pointer;
+    }
+    div.small-label {
+        font-size: 8pt;
+    }
+    table {
+        border-collapse: collapse;
+    }
+    td, th {
+        border: 1px dotted dimgrey;
+        padding: 7px;
+    }
+</style>
+<body>
+<div style="display: grid; grid-template-columns: 1fr 1fr; width: 500px">
+    <div style="grid-column: auto;">
+        <h4 style="margin-bottom: 0;">Docid:</h4>
+        <input type="text" id="docid" oninput="conllu.docid = this.value;" style="width: 200px;">
+    </div>
+    <div style="grid-column: auto;">
+        <h4 style="margin-bottom: 0;">Sentence id:</h4>
+        <input type="text" id="sent_id" oninput="conllu.sent_id = this.value;" style="width: 200px;">
+    </div>
+</div>
+<h4 style="margin-bottom: 0;">Raw text:</h4>
+<textarea name="raw-text" id="raw-text" style="width: 100%; height: 80px;"></textarea>
+<h4 style="margin-bottom: 0;">Space-separated text:</h4>
+<textarea name="tokenised-text" id="tokenised-text" style="width: 100%; height: 80px;"></textarea>
+<input type="button" value="Copy raw text" onclick="byId('tokenised-text').value = byId('raw-text').value;">
+<input type="button" value="Initialise parse" onclick="getTokens();">
+<h4 style="margin-bottom: 0;">Annotation:</h4>
+<div id="main">
+    <div id="annotation" class="parse-div"></div>
+</div>
+</body>
+</html>
