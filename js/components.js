@@ -60,8 +60,11 @@ function enumerateTokens(data) {
                             m.redraw();
                         } else {
                             secondTokenIdx = row.ID;
+                            const x = Math.min(
+                                e.clientX,
+                                document.documentElement.clientWidth-490);
                             byId(`${row.ID}-word-div`).style.backgroundColor = 'red';
-                            byId('deprel-menu').style.left = `${e.clientX}px`;
+                            byId('deprel-menu').style.left = `${x}px`;
                             byId('deprel-menu').style.top = `${e.clientY}px`;
                             byId('deprel-menu').style.display = 'grid';
                         }
@@ -75,7 +78,10 @@ function enumerateTokens(data) {
                 oncontextmenu: e => {
                     e.redraw = false;
                     tokenIdx = row.ID;
-                    byId('pos-menu').style.left = `${e.clientX}px`;
+                    const x = Math.min(
+                        e.clientX,
+                        document.documentElement.clientWidth-490);
+                    byId('pos-menu').style.left = `${x}px`;
                     byId('pos-menu').style.top = `${e.clientY}px`;
                     byId('pos-menu').style.display = 'grid';
                     return false;
