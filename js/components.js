@@ -22,7 +22,7 @@ let parseComponent = {
             m('input[type=button]', {
                 style: {'margin-left': '5px'},
                 value: 'Update CoNNL-U',
-                onclick: e => {}
+                onclick: () => {}
             }),
             m('pre#conllu-pre', {style: {'white-space': 'pre-wrap'}}, printConllu()),
             m(POSMenuComponent),
@@ -67,7 +67,7 @@ function enumerateTokens(data) {
                         }
                     }
                 },
-                ondblclick: e => {
+                ondblclick: () => {
                     firstTokenSelected = false;
                     data.wordLines[parseInt(row.ID)-1].HEAD = '0';
                     data.wordLines[parseInt(row.ID)-1].DEPREL = 'root';
@@ -99,14 +99,14 @@ function enumerateTokens(data) {
 }
 
 let conlluTableComponent = {
-    view: vnode => {
+    view: () => {
         const wordLines = conllu.wordLines;
         return m('table.ud-table', [
             m('tr', UDFields.map(field => m('th', field))),
             ...wordLines.map((wordLine, i) => m('tr', UDFields.map(
                 field => m('td', m('input[type=text]', {
                     value: conllu.wordLines[i][field],
-                    disabled: ['ID', 'FORM'].indexOf(field) >= 0,
+                    disabled: ['ID'].indexOf(field) >= 0,
                     style: {width: '80px'},
                     oninput: e => {
                         e.redraw = false;
@@ -316,48 +316,4 @@ let UDVisualisationComponent = {
             height: '400px'
         }
     })
-}
-function addUDParse(block, nodes, edges, layer) {
-    // First pass: create nodes
-    let leftOffset = 0,
-        lines = parseString.split('\n'),
-        i = 0;
-    while (lines[i].slice(0, 1) === '#')
-        i++;
-    let nCommentLines = i;
-    while (i < lines.length) {
-        let fields = lines[i].split('\t'),
-            id = layer+fields[0],
-            label = fields[1];
-        window.nodeIDs.add(id);
-        if (layer === 'top')
-            topNodes.add(id);
-        else
-            bottomNodes.add(id);
-        nodes.add({
-            id: id,
-            label: label,
-            // TODO: make adaptive
-            x: -1000 + hOffset * (i - nCommentLines),
-            y: layer === 'top' ? 0 : vOffset
-        });
-        i++;
-    }
-    // Create edges
-    i = nCommentLines;
-    while (i < lines.length) {
-        let fields = lines[i].split('\t'),
-            id = layer+fields[0],
-            edgeLabel = fields[7],
-            parent = layer+fields[6];
-        if (edgeLabel !== 'root' && edgeLabel !== 'punct') // Ignore punctuation to reduce clutter
-            edges.add({
-                id: id+'->'+parent,
-                arrows: 'from',
-                from: id,
-                to: parent,
-                label: edgeLabel
-            });
-        i++;
-    }
 }
