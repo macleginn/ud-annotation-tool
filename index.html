@@ -54,31 +54,31 @@
     table {
         border-collapse: collapse;
     }
+    .ud-table {
+        width: 100%;
+    }
     td, th {
         border: 1px dotted dimgrey;
         padding: 7px;
     }
+    input[type=button] {
+        font-size: 11pt;
+    }
+    h4 {
+        margin-top: 10px;
+        margin-bottom: 0;
+    }
 </style>
-<body>
-<div style="display: grid; grid-template-columns: 1fr 1fr; width: 500px">
-    <div style="grid-column: auto;">
-        <h4 style="margin-bottom: 0;">Docid:</h4>
-        <input type="text" id="docid" oninput="conllu.docid = this.value;" style="width: 200px;">
-    </div>
-    <div style="grid-column: auto;">
-        <h4 style="margin-bottom: 0;">Sentence id:</h4>
-        <input type="text" id="sent_id" oninput="conllu.sent_id = this.value;" style="width: 200px;">
-    </div>
-</div>
-<h4 style="margin-bottom: 0;">Raw text:</h4>
-<textarea name="raw-text" id="raw-text" style="width: 100%; height: 80px;"></textarea>
-<h4 style="margin-bottom: 0;">Space-separated text:</h4>
-<textarea name="tokenised-text" id="tokenised-text" style="width: 100%; height: 80px;"></textarea>
-<input type="button" value="Copy raw text" onclick="byId('tokenised-text').value = byId('raw-text').value;">
-<input type="button" value="Initialise parse" onclick="getTokens();">
+<body style="padding-top: 20px;">
+<input type="text" placeholder="Enter record id" id="record-id-input"><input type="button" value="Show record" onclick="showById();">
+<br/><br/>
+<label for="corpus-select">Select a corpus:</label>
+<select name="corpus-select" id="corpus-select" onchange="currentRecordId = 0;"></select>
+<input type="button" value="<< Show previous" onclick="showPrevious();">
+<input type="button" value="Show next >>" onclick="showNext();">
 <h4 style="margin-bottom: 0;">Annotation:</h4>
 <div id="main">
-    <div id="annotation" class="parse-div"></div>
+    <div id="annotation" class="parse-div" style="padding-top: 0;"></div>
 </div>
 </body>
 </html>

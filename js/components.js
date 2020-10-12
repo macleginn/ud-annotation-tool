@@ -1,9 +1,12 @@
-let firstTokenSelected = false,
-    tokenIdx, secondTokenIdx;
+let firstTokenIdx = null, 
+    secondTokenIdx = null,
+    posTokIdx = null;
 
 let parseComponent = {
     view: () => {
         return m(']', [
+            m(textFieldsComponent),
+            m('br'),
             m('div', enumerateTokens(conllu)),
             m('br'),
             m(UDVisualisationComponent),
@@ -22,25 +25,85 @@ let parseComponent = {
             m('input[type=button]', {
                 style: {'margin-left': '5px'},
                 value: 'Update CoNNL-U',
-                onclick: () => {}
+                onclick: markCellValuesAsReady
             }),
             m('pre#conllu-pre', {style: {'white-space': 'pre-wrap'}}, printConllu()),
             m(POSMenuComponent),
             m(DEPRELMenuComponent),
             // An invisible component for copying text
-            m('textarea', {id: 'copy-textarea', style: {position: 'fixed', left: '-1000px'}})
+            m('textarea', {id: 'copy-textarea', style: {position: 'fixed', left: '-1000px'}}),
+            m(buttonsComponent)
         ]);
     }
 };
 
+const textareaStyle = {
+    width: '100%',
+    height: '80px'
+}
+
+let textFieldsComponent = {
+    view: () => {
+        return m(']', [
+            m('div', { style: {
+                display: 'grid',
+                'grid-template-columns': '1fr 1fr',
+                width: '500px'}},
+                [
+                    m('div', {style: {'grid-column': 'auto'}}, [
+                        m('h4', {style: {'margin-bottom': '0'}}, 'Docid:'),
+                        m('input[type=text]', {id: 'docid', value: conllu.docid, oninput: e => {e.redraw = false; conllu.docid = e.target.value;},
+                        style: {width: '200px'}})
+                    ]),
+                    m('div', {style: {'grid-column': 'auto'}}, [
+                        m('h4', {style: {'margin-bottom': '0'}}, 'Sentence id:'),
+                        m('input[type=text]', {id: 'sent_id', value: conllu.sent_id, oninput: e => {e.redraw = false; conllu.sent_id = e.target.value;},
+                            style: {width: '200px'}})
+                    ]),
+                ]),
+            m('h4', {style: {'margin-bottom': '0'}}, 'Raw text:'),
+            m('textarea', {name: 'raw-text', id: 'raw-text', value: conllu.text, style: textareaStyle, oninput: e => { e.redraw = false; prettifyInput(); }}),
+            m('h4', {style: {'margin-bottom': '0'}}, 'Space-separated tokens:'),
+            m('textarea', {name: 'tokenised-text', id: 'tokenised-text', value: conllu.tokenised === undefined ? '' :
+                    conllu.tokenised.join(' '),
+                style: textareaStyle}),
+            m('input[type=button]', {value: 'Copy raw text', onclick: e => {
+                    e.redraw = false;
+                    byId('tokenised-text').value = byId('raw-text').value
+                        .toLowerCase()
+                        .replace(/ 7 /g, ' ocus ');
+                }}),
+            m('input[type=button]', {value: 'Initialise parse', onclick: getTokens}),
+            m('input[type=button]', {value: 'Re-initialise parse', onclick: updateTokens})
+        ])
+    }
+}
+
+function markCellValuesAsReady() {
+    for (let i = conllu.wordLines.length-1; i >= 0; i--) {
+        for (const key in conllu.wordLines[i]) {
+            if (
+                conllu.wordLines[i].hasOwnProperty(key) && 
+                endswith(String(conllu.wordLines[i][key]), ' ?')
+            ) {
+                const valueLength = conllu.wordLines[i][key].length;
+                conllu.wordLines[i][key] = conllu.wordLines[i][key].slice(0, valueLength-2);
+            }
+        }
+    }
+}
+
 function enumerateTokens(data) {
-    let result = [];
+    let result = [],
+        colour;  // Declaring the variable inside the loop leads to a bug.
+    if (data.wordLines === undefined)
+        return result;
     for (const row of data.wordLines) {
-        let colour = 'white';
-        if (firstTokenSelected && row.ID === tokenIdx)
+        colour = 'lightgrey';
+        if (row.ID === firstTokenIdx || firstTokenIdx !== null && row.ID === secondTokenIdx)
             colour = 'red';
-        else if (row.UPOS === '_' || (row.UPOS !== 'PUNCT' && row.DEPREL === '_'))
-            colour = 'lightgrey';
+        else if (row.UPOS !== '_' && row.DEPREL !== '_')
+            colour = 'white';
         result.push(m('div',
             {
                 id: `${row.ID}-word-div`,
@@ -49,21 +112,18 @@ function enumerateTokens(data) {
                     'background-color': colour
                 },
                 onclick: e => {
-                    e.redraw = false;
-                    if (!firstTokenSelected) {
-                        tokenIdx = row.ID;
-                        firstTokenSelected = true;
+                    if (firstTokenIdx === null) {
+                        firstTokenIdx = row.ID;
                         m.redraw();
                     } else {
-                        if (row.ID === tokenIdx) {
-                            firstTokenSelected = false;
-                            m.redraw();
+                        if (row.ID === firstTokenIdx) {
+                            firstTokenIdx = null;
+                            secondTokenIdx = null;
                         } else {
                             secondTokenIdx = row.ID;
                             const x = Math.min(
                                 e.clientX,
                                 document.documentElement.clientWidth-490);
-                            byId(`${row.ID}-word-div`).style.backgroundColor = 'red';
                             byId('deprel-menu').style.left = `${x}px`;
                             byId('deprel-menu').style.top = `${e.clientY}px`;
                             byId('deprel-menu').style.display = 'grid';
@@ -71,13 +131,14 @@ function enumerateTokens(data) {
                     }
                 },
                 ondblclick: () => {
-                    firstTokenSelected = false;
+                    firstTokenIdx = null;
+                    secondTokenIdx = null;
                     data.wordLines[parseInt(row.ID)-1].HEAD = '0';
                     data.wordLines[parseInt(row.ID)-1].DEPREL = 'root';
                 },
                 oncontextmenu: e => {
                     e.redraw = false;
-                    tokenIdx = row.ID;
+                    posTokIdx = row.ID;
                     const x = Math.min(
                         e.clientX,
                         document.documentElement.clientWidth-490);
@@ -104,25 +165,110 @@ function enumerateTokens(data) {
     return result;
 }
 
+function endswith(inputString, prefix) {
+	const slen = inputString.length,
+		plen = prefix.length;
+	return inputString.indexOf(prefix) !== -1 && inputString.slice(slen-plen) === prefix;
+}
+
+function getCellColour(value) {
+    if (endswith(String(value), ' ?'))
+        return '#fff0c7';
+    else
+        return 'white';
+}
+
+const fieldSkipList = ['FEATS', 'DEPS'],
+    UDFieldsSubset = UDFields.filter(f => fieldSkipList.indexOf(f) < 0),
+    fieldWidthDict = {
+        'ID': 20,
+        'FORM': 70,
+        'LEMMA': 70,
+        'UPOS': 40,
+        'XPOS': 40,
+        'HEAD': 20,
+        'DEPREL': 40,
+        'MISC': 140
+    };
+
 let conlluTableComponent = {
     view: () => {
         const wordLines = conllu.wordLines;
+        if (wordLines === undefined)
+            return m('table.ud-table');
         return m('table.ud-table', [
-            m('tr', UDFields.map(field => m('th', field))),
-            ...wordLines.map((wordLine, i) => m('tr', UDFields.map(
-                field => m('td', m('input[type=text]', {
-                    value: conllu.wordLines[i][field],
-                    disabled: ['ID'].indexOf(field) >= 0,
-                    style: {width: '80px'},
-                    oninput: e => {
-                        e.redraw = false;
-                        conllu.wordLines[i][field] = e.target.value;
-                    }
-                }))
+            m(
+                'tr', 
+                UDFieldsSubset.map(field => m(
+                    'th', 
+                    { style: { width: fieldWidthDict[field] + 'px' } },
+                    field)
+                )
+            ),
+            ...wordLines.map((_, i) => m('tr', UDFieldsSubset.map(
+                field => m(valueGuessComponent, {i: i, field: field})
             )))
         ])
     }
 }
+
+let valueGuessComponent = {
+    view: vnode => {
+        const i = vnode.attrs.i,
+            field = vnode.attrs.field,
+            wordKey = conllu.wordLines[i].FORM.replace(/-/g, '');
+        // console.log(i, field, wordKey);
+        if (conllu.wordLines[i][field] !== '_' || field !== 'LEMMA' && field !== 'MISC') {
+            ;
+        } else if (suggestionsCache.hasOwnProperty(wordKey) && suggestionsCache[wordKey][field] !== '_') {
+            if (suggestionsCache[wordKey][field] !== '_') {
+                conllu.wordLines[i][field] = suggestionsCache[wordKey][field] + ' ?';
+                m.redraw();
+                // byId(`${i}-${field}-td`).innerText = suggestionsCache[wordKey][field] + ' ?';
+            }
+        } else {
+            fetch(`${requestURL}/suggestions/${wordKey}`)
+                .then(response => response.json())
+                .then(data => {
+                    suggestionsCache[wordKey] = data;
+                    if (suggestionsCache[wordKey][field] !== '_') {
+                        conllu.wordLines[i][field] = suggestionsCache[wordKey][field] + ' ?';
+                        m.redraw();
+                    }
+                })
+                .catch(error => {
+                    alert(`Failed to download suggestions: ${error}`);
+                })
+        }
+        return m(
+            'td',
+            {
+                style: {
+                    width: fieldWidthDict[field] + 'px',
+                    padding: '3px'
+                }
+            },
+            m('input[type=text]', {
+                value: conllu.wordLines[i][field],
+                disabled: ['ID', 'HEAD'].indexOf(field) >= 0,
+                style: {
+                    width: '100%',
+                    'background-color': getCellColour(conllu.wordLines[i][field]),
+                    border: '0'
+                },
+                oninput: e => {
+                    e.redraw = false;
+                    conllu.wordLines[i][field] = e.target.value;
+                }
+            }))
+    }
+}
+
+// let conlluTableRow = {
+//     oninit: vnode => {
+//         const fields = vnode.attrs.fields;
+//     }
+// }
 
 const POSArr = [
     'ADJ',
@@ -144,8 +290,6 @@ const POSArr = [
     'X'
 ];
 
-let hidePOSMenu = () => {byId('pos-menu').style.display = 'none'}
-
 let POSMenuComponent = {
     view: () => {
         return m('div',
@@ -162,11 +306,14 @@ let POSMenuComponent = {
             [
                 m('div', {style: {'margin-bottom': '3px', 'grid-column': '1/5'}}, m('input[type=button]', {
                     value: '✕',
-                    onclick: hidePOSMenu
+                    onclick: () => { byId('pos-menu').style.display = 'none'; }
                 })),
                 ...POSArr.map(pos => m('div', {style: {'grid-column': 'auto'}}, m('input[type=button].endpoint-select', {
                     value: pos,
-                    onclick: () => { conllu.wordLines[tokenIdx-1].UPOS = pos; hidePOSMenu(); }
+                    onclick: () => { 
+                        conllu.wordLines[posTokIdx-1].UPOS = pos;
+                        byId('pos-menu').style.display = 'none';
+                    }
                 })))
             ]
         );
@@ -213,7 +360,10 @@ const DEPRELArr = [
     'xcomp'
 ];
 
-let hideDEPRELMenu = () => {byId('deprel-menu').style.display = 'none'}
+let hideDEPRELMenu = () => {
+    byId('deprel-menu').style.display = 'none';
+    m.redraw();
+}
 
 let DEPRELMenuComponent = {
     view: () => {
@@ -232,7 +382,7 @@ let DEPRELMenuComponent = {
                 m('div', {style: {'grid-column': '1/5'}}, m('input[type=button]', {
                     value: '✕',
                     onclick: () => {
-                        byId(`${conllu.wordLines[secondTokenIdx-1].ID}-word-div`).style.backgroundColor = 'white';
+                        secondTokenIdx = null;
                         hideDEPRELMenu();
                     },
                     style: {'margin-bottom': '3px'}
@@ -240,10 +390,37 @@ let DEPRELMenuComponent = {
                 ...DEPRELArr.map(deprel => m('div', {style: {'grid-column': 'auto'}}, m('input[type=button].endpoint-select', {
                     value: deprel,
                     onclick: () => {
-                        conllu.wordLines[tokenIdx-1].DEPREL = deprel;
-                        conllu.wordLines[tokenIdx-1].HEAD = secondTokenIdx;
-                        byId(`${conllu.wordLines[secondTokenIdx-1].ID}-word-div`).style.backgroundColor = 'white';
-                        firstTokenSelected = false;
+                        conllu.wordLines[firstTokenIdx-1].DEPREL = deprel;
+
+                        // Try to guess the correct POS.
+                        if (deprel === 'nmod' || deprel === 'obl')
+                            conllu.wordLines[firstTokenIdx-1].UPOS = 'NOUN ?';
+                        else if (deprel === 'case')
+                            conllu.wordLines[firstTokenIdx-1].UPOS = 'ADP ?';
+                        else if (deprel === 'cop')
+                            conllu.wordLines[firstTokenIdx-1].UPOS = 'AUX ?';
+                        else if (deprel === 'mark')
+                            conllu.wordLines[firstTokenIdx-1].UPOS = 'SCONJ ?';
+                        else if (deprel === 'cc')
+                            conllu.wordLines[firstTokenIdx-1].UPOS = 'CCONJ ?';
+                        else if (deprel === 'det')
+                            conllu.wordLines[firstTokenIdx-1].UPOS = 'DET ?';
+                        else if (deprel === 'acl' || deprel === 'advcl')
+                            conllu.wordLines[firstTokenIdx-1].UPOS = 'VERB ?';
+                        else if (deprel === 'nummod')
+                            conllu.wordLines[firstTokenIdx-1].UPOS = 'NUM ?';
+                        else if (deprel === 'conj' || deprel === 'list') {
+                            // Copy the UPOS tag of the first conjunct.
+                            const candidateUPOS = conllu.wordLines[secondTokenIdx-1].UPOS;
+                            if (endswith(candidateUPOS, ' ?'))
+                                conllu.wordLines[firstTokenIdx-1].UPOS = candidateUPOS;
+                            else
+                                conllu.wordLines[firstTokenIdx-1].UPOS = `${candidateUPOS} ?`;
+                        }
+
+                        conllu.wordLines[firstTokenIdx-1].HEAD = secondTokenIdx;
+                        firstTokenIdx = null;
+                        secondTokenIdx = null;
                         hideDEPRELMenu();
                     }
                 })))
@@ -279,7 +456,7 @@ let UDVisualisationComponent = {
                         face: 'monospace'
                     },
                     margin: 10,
-                    color: 'lightblue'
+                    // color: 'lightblue'
                 },
             },
             network = new vis.Network(container, data, options);
@@ -293,7 +470,8 @@ let UDVisualisationComponent = {
                 id: id,
                 label: label,
                 x: leftOffset,
-                y: 0
+                y: 0,
+                color: line.DEPREL === 'root' ? 'green' : 'lightblue'
             });
             leftOffset = leftOffset + hOffset * line.FORM.length + 70;
         }
@@ -322,4 +500,12 @@ let UDVisualisationComponent = {
             height: '400px'
         }
     })
+}
+
+let buttonsComponent = {
+    view: () => m('div', [
+        m('input[type=button]', {value: 'Clear', onclick: () => { conllu = {} }}),
+        m('input[type=button]', {value: 'Update record', disabled: currentRecordId === 0 || unverifiedValues(), onclick: e => {e.redraw = false; updateRecord();}}),
+        m('input[type=button]', {value: 'Submit new record', disabled: unverifiedValues(), onclick: e => {e.redraw = false; newRecord();}})
+    ])
 }

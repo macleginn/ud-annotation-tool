@@ -1,6 +1,9 @@
 const UDFields = ['ID', 'FORM', 'LEMMA', 'UPOS', 'XPOS', 'FEATS', 'HEAD', 'DEPREL', 'DEPS', 'MISC'];
+const requestURL = 'http://127.0.0.1:40000';
 
-let conllu = {};
+let conllu = {},
+    currentRecordId = 0,
+    suggestionsCache = {};
 
 function copy(obj) {
     return JSON.parse(JSON.stringify(obj));
@@ -12,6 +15,15 @@ function get(obj, key, plug) {
 
 function byId(id) {
     return document.getElementById(id);
+}
+
+function prettifyInput() {
+    let text = byId('raw-text').value;
+    text = text.replace(/\s+/g, ' ')
+        .replace(/\[.+?\]/g, '')
+        .replace(/[|,:1-6890.]/g, '')
+        .replace(/˙(\w)/g, '$1h');
+    byId('raw-text').value = text;
 }
 
 function getUDWordLine(arr) {
@@ -75,16 +87,60 @@ function getTokens() {
     m.redraw();
 }
 
+/**
+ * Preserves the annotation for the tokens before the edit.
+ * Hyphens inside word-forms are ignored to allow for glosses.
+ */
+function updateTokens() {
+    const newTokens = byId('tokenised-text').value.split(' ');
+    let i = 0;
+    while (i < conllu.wordLines.length && i < newTokens.length) {
+        if (conllu.wordLines[i].FORM.replace(/-/g, '') !== newTokens[i].replace(/-/g, ''))
+            break;
+        i++;
+    }
+    conllu.wordLines.length = i;
+    while (i < newTokens.length) {
+        conllu.wordLines.push(
+            getUDWordLine([i+1, newTokens[i], '_', '_', '_', '_', '_', '_', '_', '_'])
+        )
+        i++;
+    }
+}
+
 function printConllu() {
     let tmp = [];
     tmp.push(`# docid = ${get(conllu, 'docid', '')}`);
     tmp.push(`# sent_id = ${get(conllu, 'sent_id', '')}`);
     tmp.push(`# text = ${get(conllu, 'text', '')}`);
-    tmp.push(`# tokenised = ${get(conllu, 'tokenised', '').join(' ')}`);
+    tmp.push(`# tokenised = ${get(conllu, 'tokenised', []).join(' ')}`);
     const wordLines = get(conllu, 'wordLines', []);
     for (const line of wordLines)
         tmp.push(UDFields.map(field => line[field]).join('\t'));
     return tmp.join('\n');
+}
+
+async function showPrevious() {
+    const corpus = byId('corpus-select').value;
+    return showRecord(`${requestURL}/${corpus}/previousrecord/${currentRecordId}`);
+}
+
+async function showNext() {
+    const corpus = byId('corpus-select').value;
+    return showRecord(`${requestURL}/${corpus}/nextrecord/${currentRecordId}`);
+}
+
+async function showRecord(URL) {
+    const response = await fetch(URL);
+    if (!response.ok) {
+        const message = await response.text();
+        alert(`Failed to download the record: ${message}`);
+        return null;
+    }
+    const data = await response.json();
+    currentRecordId = data.id;
+    conllu = processBlock(data.record);
+    m.redraw();
 }
 
 /**
@@ -97,69 +153,80 @@ function copyToClipboard() {
     document.execCommand('copy');
 }
 
-const testBlock = `# sent_id = 1
-# text = \`\` I have no greater obligation than to ensure the safely of airline travelers in this country , '' Transportation Secretary Ray LaHood said in a joint statement with J. Randolph Babbitt , administrator of the Federal Aviation Administration , that was issued on the eve of a Senate hearing on aviation safety .
-# docid = NYT_ENG_20090610.0010
-# tokenised = \`\` I have no greater obligation than to ensure the safely of airline travelers in this country , '' Transportation Secretary Ray LaHood said in a joint statement with J. Randolph Babbitt , administrator of the Federal Aviation Administration , that was issued on the eve of a Senate hearing on aviation safety .
-1\t\`\`\t\`\`\tPUNCT\t\`\`\tPunctType=quot|PunctSide=ini\t24\tpunct\t_\t_
-2\tI\tI\tPRON\tPRP\tPronType=prs\t3\tnsubj\t_\t_
-3\thave\thave\tVERB\tVBP\tVerbForm=fin|Tense=pres\t24\tccomp\t_\t_
-4\tno\tno\tDET\tDT\t_\t6\tdet\t_\t_
-5\tgreater\tgreater\tADJ\tJJR\tDegree=comp\t6\tamod\t_\t_
-6\tobligation\tobligation\tNOUN\tNN\tNumber=sing\t3\tobj\t_\t_
-7\tthan\tthan\tSCONJ\tIN\t_\t9\tmark\t_\t_
-8\tto\tto\tPART\tTO\tPartType=inf|VerbForm=inf\t9\tmark\t_\t_
-9\tensure\tensure\tVERB\tVB\tVerbForm=inf\t6\tacl\t_\t_
-10\tthe\tthe\tDET\tDT\t_\t11\tdet\t_\t_
-11\tsafely\tsafely\tNOUN\tNN\tNumber=sing\t9\tobj\t_\t_
-12\tof\tof\tADP\tIN\t_\t14\tcase\t_\t_
-13\tairline\tairline\tNOUN\tNN\tNumber=sing\t14\tcompound\t_\t_
-14\ttravelers\ttraveler\tNOUN\tNNS\tNumber=plur\t11\tnmod\t_\t_
-15\tin\tin\tADP\tIN\t_\t17\tcase\t_\t_
-16\tthis\tthis\tDET\tDT\t_\t17\tdet\t_\t_
-17\tcountry\tcountry\tNOUN\tNN\tNumber=sing\t14\tnmod\t_\t_
-18\t,\t,\tPUNCT\t,\tPunctType=comm\t24\tpunct\t_\t_
-19\t''\t''\tPUNCT\t''\tPunctType=quot|PunctSide=fin\t24\tpunct\t_\t_
-20\tTransportation\tTransportation\tPROPN\tNNP\tNounType=prop|Number=sing\t21\tcompound\t_\t_
-21\tSecretary\tSecretary\tPROPN\tNNP\tNounType=prop|Number=sing\t22\tcompound\t_\t_
-22\tRay\tRay\tPROPN\tNNP\tNounType=prop|Number=sing\t24\tnsubj\t_\t_
-23\tLaHood\tLaHood\tPROPN\tNNP\tNounType=prop|Number=sing\t22\tflat\t_\t_
-24\tsaid\tsay\tVERB\tVBD\tVerbForm=fin|Tense=past\t0\troot\t_\t_
-25\tin\tin\tADP\tIN\t_\t28\tcase\t_\t_
-26\ta\ta\tDET\tDT\t_\t28\tdet\t_\t_
-27\tjoint\tjoint\tADJ\tJJ\tDegree=pos\t28\tamod\t_\t_
-28\tstatement\tstatement\tNOUN\tNN\tNumber=sing\t24\tobl\t_\t_
-29\twith\twith\tADP\tIN\t_\t30\tcase\t_\t_
-30\tJ.\tJ.\tPROPN\tNNP\tNounType=prop|Number=sing\t28\tnmod\t_\t_
-31\tRandolph\tRandolph\tPROPN\tNNP\tNounType=prop|Number=sing\t30\tflat\t_\t_
-32\tBabbitt\tBabbitt\tPROPN\tNNP\tNounType=prop|Number=sing\t30\tflat\t_\t_
-33\t,\t,\tPUNCT\t,\tPunctType=comm\t30\tpunct\t_\t_
-34\tadministrator\tadministrator\tNOUN\tNN\tNumber=sing\t30\tappos\t_\t_
-35\tof\tof\tADP\tIN\t_\t39\tcase\t_\t_
-36\tthe\tthe\tDET\tDT\t_\t39\tdet\t_\t_
-37\tFederal\tFederal\tPROPN\tNNP\tNounType=prop|Number=sing\t38\tcompound\t_\t_
-38\tAviation\tAviation\tPROPN\tNNP\tNounType=prop|Number=sing\t39\tcompound\t_\t_
-39\tAdministration\tAdministration\tPROPN\tNNP\tNounType=prop|Number=sing\t34\tnmod\t_\t_
-40\t,\t,\tPUNCT\t,\tPunctType=comm\t30\tpunct\t_\t_
-41\tthat\tthat\tPRON\tWDT\t_\t43\tnsubj:pass\t_\t_
-42\twas\tbe\tAUX\tVBD\tVerbForm=fin|Tense=past\t43\taux:pass\t_\t_
-43\tissued\tissue\tVERB\tVBN\tVerbForm=part|Tense=past|Aspect=perf\t28\tacl:relcl\t_\t_
-44\ton\ton\tADP\tIN\t_\t46\tcase\t_\t_
-45\tthe\tthe\tDET\tDT\t_\t46\tdet\t_\t_
-46\teve\teve\tNOUN\tNN\tNumber=sing\t43\tobl\t_\t_
-47\tof\tof\tADP\tIN\t_\t50\tcase\t_\t_
-48\ta\ta\tDET\tDT\t_\t50\tdet\t_\t_
-49\tSenate\tSenate\tPROPN\tNNP\tNounType=prop|Number=sing\t50\tcompound\t_\t_
-50\thearing\thearing\tNOUN\tNN\tNumber=sing\t46\tnmod\t_\t_
-51\ton\ton\tADP\tIN\t_\t53\tcase\t_\t_
-52\taviation\taviation\tNOUN\tNN\tNumber=sing\t53\tcompound\t_\t_
-53\tsafety\tsafety\tNOUN\tNN\tNumber=sing\t50\tnmod\t_\t_
-54\t.\t.\tPUNCT\t.\tPunctType=peri\t24\tpunct\t_\tSpaceAfter=No`;
+function unverifiedValues() {
+    if (conllu.wordLines === undefined)
+        return true;
+    for (const row of conllu.wordLines)
+        for (const key in row)
+            if (row.hasOwnProperty(key) && endswith(String(row[key]), ' ?'))
+                return true;
+    return false;
+}
 
-document.addEventListener('DOMContentLoaded', () => {
-    conllu = processBlock(testBlock);
-    byId('docid').value = conllu.docid;
-    byId('sent_id').value = conllu.sent_id;
+async function showById() {
+    const id = byId('record-id-input').value;
+    if (id === '' || isNaN(parseInt(id)))
+        return;
+    showRecord(`${requestURL}/byid/${id}`);
+}
+
+async function updateRecord() {
+    const response = await fetch(`${requestURL}/updaterecord/${currentRecordId}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'text/plain'
+        },
+        body: JSON.stringify({
+            docid: conllu.docid,
+            sent_id: conllu.sent_id,
+            record: printConllu()
+        })
+    });
+    if (!response.ok) {
+        const message = await response.text();
+        alert(`Failed to update the record: ${message}`);
+    } else {
+        alert('Update successful');
+        showById(currentRecordId);
+    }
+}
+
+async function newRecord() {
+    const response = await fetch(`${requestURL}/createrecord`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'text/plain'
+        },
+        body: JSON.stringify({
+            docid: conllu.docid,
+            sent_id: conllu.sent_id,
+            record: printConllu()
+        })
+    });
+    if (!response.ok) {
+        const message = await response.text();
+        alert(`Failed to create a new record: ${message}`);
+    } else {
+        const newRecordId = await response.text();
+        alert(`A new record was created with the ID ${new_record_id}`);
+        currentRecordId = parseInt(newRecordId);
+        showById(currentRecordId);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
     m.mount(byId('annotation'), parseComponent);
-    m.redraw();
+    const response = await fetch(`${requestURL}/corpora`);
+    if (!response.ok) {
+        const message = await response.text();
+        alert(`Failed to download the list of corpora: ${message}`);
+        return;
+    }
+    const corpusList = await response.json();
+    for (const corpus of corpusList) {
+        let option = document.createElement('option');
+        option.value = corpus;
+        option.innerText = corpus;
+        byId('corpus-select').appendChild(option);
+    }
 });
